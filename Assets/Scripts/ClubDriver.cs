@@ -220,7 +220,7 @@ public class ClubDriver : MonoBehaviour
     public bool IsSwinging() => swinging;
 
     [ContextMenu("Reset Club")]
-    private void ResetClub()
+    public void ResetClub()
     {
         currentAngle = startAngle;
         impactFiredThisSwing = false;
