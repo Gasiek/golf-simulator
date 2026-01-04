@@ -43,7 +43,7 @@ public class ShotTester : MonoBehaviour
             return;
         }
 
-        csvPath = Path.Combine(Application.dataPath, csvFileName);
+        csvPath = Path.Combine(GetTestResultsPath(), csvFileName);
 
         // Write CSV header
         File.WriteAllText(
@@ -157,5 +157,30 @@ public class ShotTester : MonoBehaviour
         );
 
         File.AppendAllText(csvPath, line);
+    }
+
+    public static string GetProjectRootPath()
+    {
+        // Application.dataPath points to "ProjectRoot/Assets"
+        string assetsPath = Application.dataPath;
+
+        // Go one level up to get the project root
+        string projectRoot = Directory.GetParent(assetsPath).FullName;
+
+        return projectRoot;
+    }
+
+    public static string GetTestResultsPath()
+    {
+        string projectRoot = GetProjectRootPath();
+        string testResultsPath = Path.Combine(projectRoot, "TestResults");
+
+        // Ensure the folder exists
+        if (!Directory.Exists(testResultsPath))
+        {
+            Directory.CreateDirectory(testResultsPath);
+        }
+
+        return testResultsPath;
     }
 }

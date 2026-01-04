@@ -5,6 +5,7 @@
 [Bb]uilds/
 [Ll]ogs/
 UserSettings/
+TestResults/
 
 # Visual Studio / Rider
 .vs/
