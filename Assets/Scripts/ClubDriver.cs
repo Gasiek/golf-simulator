@@ -5,38 +5,24 @@ using UnityEngine;
 public class ClubDriver : MonoBehaviour
 {
     [Header("References")]
-    public Transform Head; // Club head transform (child of ClubRoot)
-    public Transform ImpactPoint; // Empty child marking sweet spot
+    public Transform Head;
+    public Transform ImpactPoint;
 
     [Header("Swing Geometry")]
-    public float swingRadius = 1.0f; // Distance from pivot (ClubRoot) to head
-    public float swingHeight = 0.5f; // Vertical amplitude of arc
-    public float startAngle = -90f; // Degrees (backswing)
-    public float endAngle = 90f; // Degrees (follow-through)
-    public float impactAngle = 0f; // Angle considered 'impact'
+    public float swingRadius = 1.0f;
+    public float swingHeight = 0.5f;
+    public float startAngle = -90f;
+    public float endAngle = 90f;
+    public float impactDetectionRadius = 0.05f;
 
     [Header("Motion")]
-    public float swingTempo = 1f;
-
-    /*
- * Controls how fast the swing progresses along its parameterized arc.
- *
- * IMPORTANT:
- * - This is NOT the true club head speed.
- * - It defines how quickly the swing angle advances over time.
- * - Actual club head speed must be measured from world-space motion
- *   (see headVelocityWorld), especially at impact.
- *
- * Changing swing geometry (radius, height) WILL change the real head speed
- * even if swingTempo stays the same.
- */
-
-    public bool autoStart = false; // Start swing on play
+    public float swingTempo = 1f; // NOT real head speed
+    public bool autoStart = false;
 
     [Header("Face / Path")]
-    public float swingPathAngle = 0f; // Horizontal rotation of the arc (degrees)
-    public float faceAngle = 0f; // Open/closed rotation around club's local Y
-    public Vector2 impactOffset = Vector2.zero; // local offset for off-center hit
+    public float swingPathAngle = 0f;
+    public float faceAngle = 0f;
+    public Vector2 impactOffset = Vector2.zero;
 
     [Header("Debug")]
     public bool drawDebug = true;
@@ -51,9 +37,11 @@ public class ClubDriver : MonoBehaviour
     public Vector3 startFaceDirWorld;
     public Vector3 endFaceDirWorld;
 
-    public event Action<Vector3, Vector3, Vector3> OnImpact;
+    [Header("Debug Testing")]
+    public bool logImpactDetails = true;
+    public bool drawSwingArcGizmos = true;
 
-    // signature: OnImpact(impactWorldPos, headVelocityWorld, faceNormalWorld)
+    public event Action<Vector3, Vector3, Vector3> OnImpact;
 
     private float currentAngle;
     private bool swinging = false;
@@ -69,7 +57,6 @@ public class ClubDriver : MonoBehaviour
 
         angleDirection = (endAngle >= startAngle) ? 1f : -1f;
         currentAngle = startAngle;
-
         ResetClub();
 
         if (autoStart)
@@ -81,39 +68,27 @@ public class ClubDriver : MonoBehaviour
         if (!swinging || Head == null)
             return;
 
-        // Linear distance along arc this frame
+        // Distance along arc this frame
         float distanceThisFrame = swingTempo * Time.deltaTime;
-
-        // Convert linear distance to angular delta
         float radius = Mathf.Max(0.0001f, swingRadius);
-        float deltaThetaRad = distanceThisFrame / radius;
-        float deltaThetaDeg = Mathf.Rad2Deg * deltaThetaRad * angleDirection;
+        float deltaThetaDeg = Mathf.Rad2Deg * (distanceThisFrame / radius) * angleDirection;
 
-        // Advance angle
         float nextAngle = currentAngle + deltaThetaDeg;
-
         bool reachedEnd = false;
-        if (angleDirection > 0f && nextAngle >= endAngle)
-        {
-            nextAngle = endAngle;
-            reachedEnd = true;
-        }
-        if (angleDirection < 0f && nextAngle <= endAngle)
+        if (
+            (angleDirection > 0f && nextAngle >= endAngle)
+            || (angleDirection < 0f && nextAngle <= endAngle)
+        )
         {
             nextAngle = endAngle;
             reachedEnd = true;
         }
 
-        // Previous world pos for tangent
         Vector3 prevWorld = Head.position;
 
         // Compute next local position
         Vector3 nextLocal = ComputeLocalPosForAngleDeg(nextAngle);
-
-        // Apply horizontal swingPath rotation
-        Quaternion pathRot = Quaternion.Euler(0f, swingPathAngle, 0f);
-        nextLocal = pathRot * nextLocal;
-
+        nextLocal = Quaternion.Euler(0f, swingPathAngle, 0f) * nextLocal;
         Head.localPosition = nextLocal;
         Vector3 nextWorld = Head.position;
 
@@ -121,9 +96,8 @@ public class ClubDriver : MonoBehaviour
         headVelocityWorld = (nextWorld - prevHeadWorldPos) / Time.deltaTime;
         prevHeadWorldPos = nextWorld;
 
-        // --- Tangent and rotation ---
+        // Rotation
         Vector3 tangentWorld = ComputeTangentWorld(currentAngle);
-
         if (tangentWorld.sqrMagnitude > 1e-8f)
         {
             Quaternion tangentRotation = Quaternion.LookRotation(
@@ -132,25 +106,18 @@ public class ClubDriver : MonoBehaviour
             );
             Quaternion uprightFix = Quaternion.Euler(0f, 0f, 90f);
             Quaternion faceRotation = Quaternion.AngleAxis(faceAngle, Vector3.up);
-
             Head.rotation = tangentRotation * uprightFix * faceRotation;
         }
 
-        // Impact point offset
+        // Impact offset
         ImpactPoint.localPosition = new Vector3(impactOffset.x, impactOffset.y, 0f);
 
-        // Detect impact crossing
-        DetectImpact(currentAngle, nextAngle);
+        // Sub-step distance-based impact detection
+        DetectImpactDistanceSubstep(prevWorld, nextWorld);
 
-        // Store persistent start/end face directions
-        if (!swinging && startFaceDirWorld == Vector3.zero)
-        {
-            startFaceDirWorld = ComputeFaceDirectionWorld(startAngle);
-        }
+        // Persistent face directions
         if (reachedEnd)
-        {
             endFaceDirWorld = ComputeFaceDirectionWorld(endAngle);
-        }
 
         currentAngle = nextAngle;
 
@@ -164,30 +131,23 @@ public class ClubDriver : MonoBehaviour
     private Vector3 ComputeLocalPosForAngleDeg(float angleDeg)
     {
         float rad = Mathf.Deg2Rad * angleDeg;
-
-        // ZY-plane swing, downward first
         float z = Mathf.Sin(rad) * swingRadius;
         float y = -Mathf.Cos(rad) * swingHeight;
-        float x = 0f;
-
-        return new Vector3(x, y, z);
+        return new Vector3(0f, y, z);
     }
 
     private Vector3 GetSwingPlaneNormal()
     {
-        // The swing plane rotates horizontally by swingPathAngle
         return Quaternion.Euler(0f, swingPathAngle, 0f) * Vector3.right;
     }
 
     private Vector3 ComputeTangentWorld(float angle)
     {
-        // Small delta along arc to compute tangent
         float delta = 0.01f * angleDirection;
         Vector3 currentPos =
             Quaternion.Euler(0f, swingPathAngle, 0f) * ComputeLocalPosForAngleDeg(angle);
         Vector3 nextPos =
             Quaternion.Euler(0f, swingPathAngle, 0f) * ComputeLocalPosForAngleDeg(angle + delta);
-
         return (
             transform.TransformPoint(nextPos) - transform.TransformPoint(currentPos)
         ).normalized;
@@ -199,80 +159,84 @@ public class ClubDriver : MonoBehaviour
         Quaternion tangentRotation = Quaternion.LookRotation(tangent, GetSwingPlaneNormal());
         Quaternion uprightFix = Quaternion.Euler(0f, 0f, 90f);
         Quaternion faceRot = Quaternion.AngleAxis(faceAngle, Vector3.up);
-
         return (tangentRotation * uprightFix * faceRot) * Vector3.forward;
     }
 
-    private void DetectImpact(float prevAngle, float nextAngle)
+    private void DetectImpactDistanceSubstep(Vector3 prevPos, Vector3 nextPos)
     {
-        if (impactFiredThisSwing)
+        if (impactFiredThisSwing || ImpactPoint == null)
             return;
 
-        bool crossed =
-            (angleDirection > 0)
-                ? prevAngle <= impactAngle && nextAngle >= impactAngle
-                : prevAngle >= impactAngle && nextAngle <= impactAngle;
+        GameObject ball = GameObject.FindWithTag("Ball");
+        if (ball == null)
+            return;
 
-        if (crossed)
+        Vector3 ballPos = ball.transform.position;
+        Vector3 closest = ClosestPointOnLineSegment(prevPos, nextPos, ballPos);
+        float dist = Vector3.Distance(ballPos, closest);
+
+        if (dist <= impactDetectionRadius)
         {
             impactFiredThisSwing = true;
-
             Vector3 impactWorldPos = ImpactPoint.position;
             Vector3 velocityAtImpact = headVelocityWorld;
             Vector3 faceNormalWorld = Head.forward;
+            float vNormal = Vector3.Dot(velocityAtImpact, faceNormalWorld);
 
             OnImpact?.Invoke(impactWorldPos, velocityAtImpact, faceNormalWorld);
 
-            Debug.Log(
-                $"Impact fired! pos={impactWorldPos}, speed={velocityAtImpact.magnitude:F2} m/s, faceNormal={faceNormalWorld}"
-            );
+            if (logImpactDetails)
+                Debug.Log(
+                    $"Impact fired! pos={impactWorldPos}, speed={velocityAtImpact.magnitude:F2}, vNormal={vNormal:F2}, faceNormal={faceNormalWorld}"
+                );
+
+            // Draw line to ball
+            Debug.DrawLine(impactWorldPos, ballPos, Color.magenta, 2f);
         }
+    }
+
+    private Vector3 ClosestPointOnLineSegment(Vector3 a, Vector3 b, Vector3 point)
+    {
+        Vector3 ab = b - a;
+        float t = Vector3.Dot(point - a, ab) / Vector3.Dot(ab, ab);
+        t = Mathf.Clamp01(t);
+        return a + ab * t;
     }
 
     private void DrawDebugging(Vector3 prevWorld, Vector3 nextWorld)
     {
-        // Arc segment
         Debug.DrawLine(prevWorld, nextWorld, debugArcColor);
-
-        // Tangent vector
-        Vector3 tangentDir = (nextWorld - prevWorld).normalized;
-        Debug.DrawRay(nextWorld, tangentDir * 0.5f, Color.magenta);
-
-        // Velocity vector
         Debug.DrawRay(nextWorld, headVelocityWorld.normalized * 0.2f, debugVelocityColor);
-
-        // Face normal from impact point
         Debug.DrawRay(ImpactPoint.position, Head.forward * 0.5f, debugFaceColor);
 
-        // Persistent start/end face
         if (drawPersistentFace)
         {
-            Debug.DrawRay(transform.position, startFaceDirWorld * 0.7f, startFaceColor); // start
-            Debug.DrawRay(transform.position, endFaceDirWorld * 0.7f, endFaceColor); // end
+            Debug.DrawRay(transform.position, startFaceDirWorld * 0.7f, startFaceColor);
+            Debug.DrawRay(transform.position, endFaceDirWorld * 0.7f, endFaceColor);
         }
+    }
 
-        // Start/end markers
-        Vector3 startLocal =
-            Quaternion.Euler(0f, swingPathAngle, 0f) * ComputeLocalPosForAngleDeg(startAngle);
-        Vector3 endLocal =
-            Quaternion.Euler(0f, swingPathAngle, 0f) * ComputeLocalPosForAngleDeg(endAngle);
-        Debug.DrawLine(
-            transform.TransformPoint(startLocal) + Vector3.up * 0.02f,
-            transform.TransformPoint(startLocal) - Vector3.up * 0.02f,
-            Color.white
-        );
-        Debug.DrawLine(
-            transform.TransformPoint(endLocal) + Vector3.up * 0.02f,
-            transform.TransformPoint(endLocal) - Vector3.up * 0.02f,
-            Color.white
-        );
+    void OnDrawGizmosSelected()
+    {
+        if (!drawSwingArcGizmos || Head == null)
+            return;
+
+        Gizmos.color = Color.cyan;
+        Vector3 prev = transform.TransformPoint(ComputeLocalPosForAngleDeg(startAngle));
+        int steps = 50;
+        for (int i = 1; i <= steps; i++)
+        {
+            float angle = Mathf.Lerp(startAngle, endAngle, i / (float)steps);
+            Vector3 next = transform.TransformPoint(ComputeLocalPosForAngleDeg(angle));
+            Gizmos.DrawLine(prev, next);
+            prev = next;
+        }
     }
 
     // --- Public API ---
     public void StartSwing()
     {
         currentAngle = startAngle;
-        prevHeadWorldPos = Head != null ? Head.position : transform.position;
         impactFiredThisSwing = false;
         swinging = true;
 
@@ -291,6 +255,7 @@ public class ClubDriver : MonoBehaviour
             Quaternion faceRot = Quaternion.AngleAxis(faceAngle, Vector3.up);
             Head.rotation = tangentRotation * uprightFix * faceRot;
 
+            prevHeadWorldPos = Head.position;
             startFaceDirWorld = ComputeFaceDirectionWorld(startAngle);
         }
     }
@@ -300,10 +265,6 @@ public class ClubDriver : MonoBehaviour
     public bool IsSwinging() => swinging;
 
     public Vector3 GetHeadVelocityWorld() => headVelocityWorld;
-
-    // --- Context Menu Methods ---
-    [ContextMenu("Start Swing")]
-    private void ContextStartSwing() => StartSwing();
 
     [ContextMenu("Reset Club")]
     private void ResetClub()
@@ -321,7 +282,6 @@ public class ClubDriver : MonoBehaviour
         if (ImpactPoint != null)
             ImpactPoint.localPosition = Vector3.zero;
 
-        // Reset persistent debug rays
         startFaceDirWorld = Vector3.zero;
         endFaceDirWorld = Vector3.zero;
     }
