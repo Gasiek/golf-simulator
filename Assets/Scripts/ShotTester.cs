@@ -12,6 +12,7 @@ public class ShotConfig
     public float pathAngle;
     public float faceAngle;
     public float swingPlaneTilt;
+    public TeeHeightPreset teeHeight;
 }
 
 public class ShotTester : MonoBehaviour
@@ -19,6 +20,10 @@ public class ShotTester : MonoBehaviour
     [Header("References")]
     public ClubDriver3D clubDriver;
     public BallImpactSolver3D ball;
+
+    [Header("Tee Heights")]
+    [Tooltip("Tee height presets to test. Assign ScriptableObject presets here.")]
+    public TeeHeightPreset[] teeHeights;
 
     [Header("Option Arrays")]
     public float[] lofts = new float[] { 32f };
@@ -50,13 +55,19 @@ public class ShotTester : MonoBehaviour
             return;
         }
 
+        if (teeHeights == null || teeHeights.Length == 0)
+        {
+            Debug.LogError("ShotTester: Assign at least one TeeHeightPreset!");
+            return;
+        }
+
         csvPath = Path.Combine(GetTestResultsPath(), csvFileName);
 
         // Write CSV header with D-Plane parameters
         File.WriteAllText(
             csvPath,
             // Config columns
-            "ConfigLoft,ConfigDrag,ConfigLift,ConfigPathAngle,ConfigFaceAngle,ConfigSwingPlaneTilt,"
+            "TeeHeight,TeeY,ConfigLoft,ConfigDrag,ConfigLift,ConfigPathAngle,ConfigFaceAngle,ConfigSwingPlaneTilt,"
                 // Club delivery (D-Plane inputs)
                 + "ClubSpeed_mps,ClubSpeed_mph,AttackAngle,ClubPath,FaceAngle,DynamicLoft,SpinLoft,FaceToPath,"
                 // Ball launch (D-Plane outputs)
@@ -74,6 +85,7 @@ public class ShotTester : MonoBehaviour
     private void GenerateAllShots()
     {
         allShots.Clear();
+        foreach (var tee in teeHeights)
         foreach (var loft in lofts)
         foreach (var path in pathAngles)
         foreach (var face in faceAngles)
@@ -90,6 +102,7 @@ public class ShotTester : MonoBehaviour
                     swingPlaneTilt = tilt,
                     drag = drag,
                     lift = lift,
+                    teeHeight = tee,
                 }
             );
         }
@@ -100,9 +113,8 @@ public class ShotTester : MonoBehaviour
     private IEnumerator RunShotsSequentially()
     {
         isRunning = true;
-        Vector3 startPos = ball.transform.position;
 
-        Debug.Log($"[ShotTester] Starting test sequence. Ball start position: {startPos}");
+        Debug.Log($"[ShotTester] Starting test sequence with {teeHeights.Length} tee heights.");
 
         for (int i = 0; i < allShots.Count; i++)
         {
@@ -112,6 +124,7 @@ public class ShotTester : MonoBehaviour
                 $"═══════════════════════════════════════\n"
                     + $"  SHOT {i + 1}/{allShots.Count}\n"
                     + $"═══════════════════════════════════════\n"
+                    + $"  Tee: {config.teeHeight.displayName} (Y: {config.teeHeight.ballY})\n"
                     + $"  Loft: {config.loft}°\n"
                     + $"  Path Angle: {config.pathAngle}°\n"
                     + $"  Face Angle: {config.faceAngle}°\n"
@@ -119,8 +132,9 @@ public class ShotTester : MonoBehaviour
                     + $"  Drag: {config.drag}, Lift: {config.lift}"
             );
 
-            // Step 1: Reset ball to starting position
-            ball.ResetAndPrepare(startPos);
+            // Step 1: Reset ball to starting position with tee height
+            Vector3 ballStartPos = new Vector3(0f, config.teeHeight.ballY, 0f);
+            ball.ResetAndPrepare(ballStartPos);
 
             if (verboseLogging)
                 Debug.Log(
@@ -140,6 +154,8 @@ public class ShotTester : MonoBehaviour
             clubDriver.faceAngle = config.faceAngle;
             clubDriver.swingPathAngle = config.pathAngle;
             clubDriver.swingPlaneTilt = config.swingPlaneTilt;
+            clubDriver.impactPlaneY = config.teeHeight.ballY;
+            clubDriver.clubZOffset = config.teeHeight.clubZOffset;
 
             // Step 4: Wait a frame to ensure everything is initialized
             yield return null;
@@ -214,17 +230,19 @@ public class ShotTester : MonoBehaviour
         float carryYds = ball.Carry * 1.094f;
 
         string line = string.Format(
-            // Config columns (6)
-            "{0},{1},{2},{3},{4},{5},"
+            // Config columns (8)
+            "{0},{1:F4},{2},{3},{4},{5},{6},{7},"
                 // Club delivery (8)
-                + "{6:F2},{7:F1},{8:F2},{9:F2},{10:F2},{11:F2},{12:F2},{13:F2},"
+                + "{8:F2},{9:F1},{10:F2},{11:F2},{12:F2},{13:F2},{14:F2},{15:F2},"
                 // Ball launch (7)
-                + "{14:F2},{15:F1},{16:F3},{17:F2},{18:F2},{19:F0},{20:F2},"
+                + "{16:F2},{17:F1},{18:F3},{19:F2},{20:F2},{21:F0},{22:F2},"
                 // Flight results (6)
-                + "{21:F2},{22:F1},{23:F2},{24:F2},{25:F2},{26:F2},"
+                + "{23:F2},{24:F1},{25:F2},{26:F2},{27:F2},{28:F2},"
                 // Final position (5)
-                + "{27:F2},{28:F2},{29:F2},{30:F2},{31:F2}\n",
+                + "{29:F2},{30:F2},{31:F2},{32:F2},{33:F2}\n",
             // Config
+            config.teeHeight.displayName,
+            config.teeHeight.ballY,
             config.loft,
             config.drag,
             config.lift,

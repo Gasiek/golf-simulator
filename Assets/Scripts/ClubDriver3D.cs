@@ -35,8 +35,13 @@ public class ClubDriver3D : MonoBehaviour
     public float swingPlaneTilt = 0f;
 
     [Header("Impact Plane")]
-    [Tooltip("Height of club head at impact. For ball on ground: 0.02135 (ball radius)")]
+    [Tooltip("Height of club head at impact. Matches ball center Y position.")]
     public float impactPlaneY = 0.02135f;
+
+    [Tooltip(
+        "Z offset for the club. Negative = move club backward (for testing different tee heights)."
+    )]
+    public float clubZOffset = 0f;
 
     [Header("Debug")]
     public bool drawDebug = true;
@@ -128,7 +133,7 @@ public class ClubDriver3D : MonoBehaviour
     private void CalculateClubRootOffset()
     {
         float bottomY = -Mathf.Cos(0f) * swingHeight;
-        clubRootOffset = new Vector3(0f, impactPlaneY - bottomY, 0f);
+        clubRootOffset = new Vector3(0f, impactPlaneY - bottomY, clubZOffset);
     }
 
     private void DetectImpact(Vector3 prev, Vector3 next)

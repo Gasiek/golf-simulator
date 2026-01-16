@@ -32,11 +32,20 @@ public class BallImpactSolver3D : MonoBehaviour
     [Tooltip("Air density in kg/m³ (sea level at 15°C: 1.225)")]
     public float airDensity = 1.225f;
 
-    [Tooltip("Base drag coefficient (golf ball with dimples: 0.25-0.35)")]
-    public float Cd = 0.24f;
+    [Tooltip("Base drag coefficient at low speed (golf ball with dimples: 0.25-0.35)")]
+    public float CdBase = 0.27f;
 
-    [Tooltip("Magnus lift coefficient multiplier")]
-    public float ClMagnusMultiplier = 0.25f;
+    [Tooltip("Drag coefficient at high speed (Reynolds number effect)")]
+    public float CdHighSpeed = 0.21f;
+
+    [Tooltip("Speed threshold for drag transition (m/s)")]
+    public float dragTransitionSpeed = 50f;
+
+    [Tooltip("Baseline lift coefficient from dimples (applies even at lower spin)")]
+    public float ClBaseline = 0.10f;
+
+    [Tooltip("Additional lift coefficient per unit spin parameter")]
+    public float ClSpinFactor = 0.35f;
 
     [Header("Debug")]
     public bool debugLogs = true;
@@ -182,23 +191,29 @@ public class BallImpactSolver3D : MonoBehaviour
         {
             Vector3 velDir = velocity / speed;
 
-            // Aerodynamic drag: F = 0.5 * ρ * v² * Cd * A
+            // Aerodynamic drag with Reynolds number effect
+            // High-speed golf balls experience lower drag due to turbulent boundary layer
             if (enableDrag)
             {
+                float speedFactor = Mathf.Clamp01((speed - 20f) / (dragTransitionSpeed - 20f));
+                float Cd = Mathf.Lerp(CdBase, CdHighSpeed, speedFactor);
+
                 float dragForce = 0.5f * airDensity * speed * speed * Cd * ballCrossSectionArea;
                 Vector3 dragAccel = -velDir * (dragForce / ballMass);
                 velocity += dragAccel * dt;
             }
 
-            // Magnus lift force
+            // Magnus lift force with dimple baseline effect
+            // Real golf balls generate lift even at moderate spin due to dimple aerodynamics
             if (enableLift && spinVector.sqrMagnitude > 0f)
             {
                 float spinMag = spinVector.magnitude; // rad/s
                 float spinParameter = (spinMag * ballRadius) / speed;
 
-                // Effective lift coefficient increases with spin parameter
-                float Cl = ClMagnusMultiplier * spinParameter;
-                Cl = Mathf.Clamp(Cl, 0f, 0.4f); // Physical limit
+                // Lift coefficient: baseline from dimples + additional from spin
+                // This ensures low-spin driver shots still get meaningful lift
+                float Cl = ClBaseline + ClSpinFactor * spinParameter;
+                Cl = Mathf.Clamp(Cl, 0f, 0.5f);
 
                 float liftForce = 0.5f * airDensity * speed * speed * Cl * ballCrossSectionArea;
                 Vector3 liftDir = Vector3.Cross(spinVector.normalized, velDir).normalized;
