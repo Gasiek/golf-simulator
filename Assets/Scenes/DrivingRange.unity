@@ -576,8 +576,8 @@ GameObject:
   - component: {fileID: 491791844}
   - component: {fileID: 491791843}
   - component: {fileID: 491791846}
-  - component: {fileID: 491791842}
-  - component: {fileID: 491791847}
+  - component: {fileID: 491791848}
+  - component: {fileID: 491791849}
   m_Layer: 0
   m_Name: Ball
   m_TagString: Ball
@@ -585,29 +585,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &491791842
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 491791841}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 23a0ecb68cd6d41698b90586f557d4f0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: '::'
-  clubDriver: {fileID: 931929942}
-  ballMass: 0.045
-  clubMass: 0.2
-  COR: 0.83
-  loftDegrees: 32
-  enableDrag: 0
-  enableLift: 0
-  dragCoefficient: 0.003
-  liftCoefficient: 0.0004
-  spinEfficiency: 0.8
-  debugLogs: 1
 --- !u!23 &491791843
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -674,7 +651,7 @@ Transform:
   m_GameObject: {fileID: 491791841}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0.02135, z: 0}
   m_LocalScale: {x: 0.0427, y: 0.0427, z: 0.0427}
   m_ConstrainProportionsScale: 1
   m_Children: []
@@ -799,7 +776,30 @@ LineRenderer:
   m_UseWorldSpace: 1
   m_Loop: 0
   m_ApplyActiveColorSpace: 1
---- !u!114 &491791847
+--- !u!114 &491791848
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 491791841}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 172eb1659559441bfa7604e8c5dfe4b8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BallImpactSolver3D
+  clubDriver: {fileID: 931929944}
+  ballMass: 0.04593
+  ballRadius: 0.02135
+  clubMass: 0.2
+  COR: 0.86
+  enableDrag: 1
+  enableLift: 1
+  airDensity: 1.225
+  Cd: 0.24
+  ClMagnusMultiplier: 0.25
+  debugLogs: 1
+--- !u!114 &491791849
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -810,11 +810,11 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5227534551fd740598625bfe1322821f, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: '::'
+  m_EditorClassIdentifier: Assembly-CSharp::BallPathTracer
   lineMaterial: {fileID: 2100000, guid: 5aa22eb72b6b3402e9925ee1ec838790, type: 2}
   minDistance: 0.01
   fadeDelay: 3
-  lineWidth: 0.1
+  lineWidth: 0.05
 --- !u!1 &533024339
 GameObject:
   m_ObjectHideFlags: 0
@@ -844,22 +844,31 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d3a40859d2ff447e8a9e5b9ea3153a87, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
-  clubDriver: {fileID: 931929942}
-  ball: {fileID: 491791842}
+  clubDriver: {fileID: 931929944}
+  ball: {fileID: 491791848}
   lofts:
-  - 24
   - 32
-  - 36
+  - 12
   pathAngles:
+  - -10
+  - -5
   - 0
+  - 5
   - 10
   faceAngles:
+  - -10
+  - -5
   - 0
+  - 5
   - 10
-  dragOptions: 0100
-  liftOptions: 0100
-  delayBetweenShots: 0.5
+  swingPlaneTilts:
+  - 0
+  dragOptions: 01
+  liftOptions: 01
+  delayBetweenShots: 0.1
+  maxShotTime: 30
   csvFileName: ShotResults.csv
+  verboseLogging: 0
 --- !u!4 &533024341
 Transform:
   m_ObjectHideFlags: 0
@@ -933,7 +942,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 931929943}
-  - component: {fileID: 931929942}
+  - component: {fileID: 931929944}
   m_Layer: 0
   m_Name: ClubRoot
   m_TagString: Untagged
@@ -941,33 +950,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &931929942
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 931929941}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b455f326059b54ccfb0cc0287dd63a0e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: '::'
-  Head: {fileID: 270487508}
-  ImpactPoint: {fileID: 1981247943}
-  swingRadius: 1
-  swingHeight: 0.3
-  startAngle: -90
-  endAngle: 90
-  swingTempo: 25
-  autoStart: 1
-  swingPathAngle: 10
-  faceAngle: 10
-  impactPlaneY: 0
-  drawDebug: 1
-  debugArcColor: {r: 0, g: 1, b: 1, a: 1}
-  debugVelocityColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
-  debugFaceColor: {r: 0, g: 1, b: 0, a: 1}
 --- !u!4 &931929943
 Transform:
   m_ObjectHideFlags: 0
@@ -985,6 +967,35 @@ Transform:
   - {fileID: 270487508}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &931929944
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 931929941}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2cc33f2f07c894eb992025a705566c73, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
+  Head: {fileID: 270487508}
+  ImpactPoint: {fileID: 1981247943}
+  swingRadius: 1
+  swingHeight: 0.3
+  startAngle: -90
+  endAngle: 90
+  swingTempo: 38
+  autoStart: 1
+  clubLoftDegrees: 32
+  faceAngle: 0
+  swingPathAngle: 0
+  swingPlaneTilt: -10
+  impactPlaneY: 0
+  drawDebug: 1
+  debugArcColor: {r: 0, g: 1, b: 1, a: 1}
+  debugVelocityColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  debugFaceColor: {r: 0, g: 1, b: 0, a: 1}
 --- !u!1 &1244601804
 GameObject:
   m_ObjectHideFlags: 0
@@ -1460,7 +1471,7 @@ Transform:
   m_GameObject: {fileID: 1843431109}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0, y: -0.02135, z: 0}
+  m_LocalPosition: {x: -0, y: 0, z: 0}
   m_LocalScale: {x: 100, y: 100, z: 100}
   m_ConstrainProportionsScale: 1
   m_Children: []

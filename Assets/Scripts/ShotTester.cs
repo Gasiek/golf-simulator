@@ -11,44 +11,60 @@ public class ShotConfig
     public bool lift;
     public float pathAngle;
     public float faceAngle;
+    public float swingPlaneTilt;
 }
 
 public class ShotTester : MonoBehaviour
 {
     [Header("References")]
-    public ClubDriver clubDriver;
-    public BallImpactSolver ball;
+    public ClubDriver3D clubDriver;
+    public BallImpactSolver3D ball;
 
     [Header("Option Arrays")]
     public float[] lofts = new float[] { 32f };
     public float[] pathAngles = new float[] { 0f };
     public float[] faceAngles = new float[] { 0f };
-    public bool[] dragOptions = new bool[] { true, false };
-    public bool[] liftOptions = new bool[] { true, false };
+    public float[] swingPlaneTilts = new float[] { -10f, -5f, 0f, 5f, 10f };
+    public bool[] dragOptions = new bool[] { true };
+    public bool[] liftOptions = new bool[] { true };
 
     [Header("Timing")]
-    public float delayBetweenShots = 1f;
+    public float delayBetweenShots = 0.5f;
+    public float maxShotTime = 30f; // Timeout to prevent infinite loops
 
     [Header("CSV Output")]
     public string csvFileName = "ShotResults.csv";
 
+    [Header("Debug")]
+    public bool verboseLogging = false;
+
     private List<ShotConfig> allShots = new List<ShotConfig>();
     private string csvPath;
+    private bool isRunning = false;
 
     void Start()
     {
         if (clubDriver == null || ball == null)
         {
-            Debug.LogWarning("ShotTester: Assign ClubDriver and Ball!");
+            Debug.LogError("ShotTester: Assign ClubDriver and Ball references!");
             return;
         }
 
         csvPath = Path.Combine(GetTestResultsPath(), csvFileName);
 
-        // Write CSV header
+        // Write CSV header with D-Plane parameters
         File.WriteAllText(
             csvPath,
-            "Loft,Drag,Lift,PathAngle,FaceAngle,ClubSpeed,BallSpeed,LaunchAngle,SideAngle,SpinRPM,SpinX,SpinY,SpinZ,Carry,Apex,FlightTime,FinalPosX,FinalPosY,FinalPosZ\n"
+            // Config columns
+            "ConfigLoft,ConfigDrag,ConfigLift,ConfigPathAngle,ConfigFaceAngle,ConfigSwingPlaneTilt,"
+                // Club delivery (D-Plane inputs)
+                + "ClubSpeed_mps,ClubSpeed_mph,AttackAngle,ClubPath,FaceAngle,DynamicLoft,SpinLoft,FaceToPath,"
+                // Ball launch (D-Plane outputs)
+                + "BallSpeed_mps,BallSpeed_mph,SmashFactor,LaunchAngle,LaunchDirection,SpinRate_rpm,SpinAxisTilt,"
+                // Flight results
+                + "Carry_m,Carry_yds,Offline_m,Apex_m,FlightTime_s,CurveAfterApex_m,"
+                // Final position
+                + "FinalPosX,FinalPosY,FinalPosZ,ApexPosX,ApexPosZ\n"
         );
 
         GenerateAllShots();
@@ -59,105 +75,198 @@ public class ShotTester : MonoBehaviour
     {
         allShots.Clear();
         foreach (var loft in lofts)
+        foreach (var path in pathAngles)
+        foreach (var face in faceAngles)
+        foreach (var tilt in swingPlaneTilts)
+        foreach (var drag in dragOptions)
+        foreach (var lift in liftOptions)
         {
-            foreach (var path in pathAngles)
-            {
-                foreach (var face in faceAngles)
+            allShots.Add(
+                new ShotConfig
                 {
-                    foreach (var drag in dragOptions)
-                    {
-                        foreach (var lift in liftOptions)
-                        {
-                            allShots.Add(
-                                new ShotConfig
-                                {
-                                    loft = loft,
-                                    pathAngle = path,
-                                    faceAngle = face,
-                                    drag = drag,
-                                    lift = lift,
-                                }
-                            );
-                        }
-                    }
+                    loft = loft,
+                    pathAngle = path,
+                    faceAngle = face,
+                    swingPlaneTilt = tilt,
+                    drag = drag,
+                    lift = lift,
                 }
-            }
+            );
         }
 
-        Debug.Log($"Generated {allShots.Count} shot scenarios.");
+        Debug.Log($"[ShotTester] Generated {allShots.Count} shot scenarios.");
     }
 
     private IEnumerator RunShotsSequentially()
     {
+        isRunning = true;
         Vector3 startPos = ball.transform.position;
+
+        Debug.Log($"[ShotTester] Starting test sequence. Ball start position: {startPos}");
 
         for (int i = 0; i < allShots.Count; i++)
         {
             var config = allShots[i];
 
-            // Reset ball and club
-            ball.ResetAndPrepare(startPos);
-            clubDriver.ResetClub();
-
-            // Apply configuration
-            ball.loftDegrees = config.loft;
-            ball.enableDrag = config.drag;
-            ball.enableLift = config.lift;
-
-            clubDriver.faceAngle = config.faceAngle;
-            clubDriver.swingPathAngle = config.pathAngle;
-
             Debug.Log(
-                $"=== Testing Shot {i + 1}/{allShots.Count} ===\n"
-                    + $"Loft: {ball.loftDegrees}°, Drag: {ball.enableDrag}, Lift: {ball.enableLift}, "
-                    + $"Path Angle: {clubDriver.swingPathAngle}°, Face Angle: {clubDriver.faceAngle}°"
+                $"═══════════════════════════════════════\n"
+                    + $"  SHOT {i + 1}/{allShots.Count}\n"
+                    + $"═══════════════════════════════════════\n"
+                    + $"  Loft: {config.loft}°\n"
+                    + $"  Path Angle: {config.pathAngle}°\n"
+                    + $"  Face Angle: {config.faceAngle}°\n"
+                    + $"  Swing Plane Tilt: {config.swingPlaneTilt}°\n"
+                    + $"  Drag: {config.drag}, Lift: {config.lift}"
             );
 
-            // Start swing
+            // Step 1: Reset ball to starting position
+            ball.ResetAndPrepare(startPos);
+
+            if (verboseLogging)
+                Debug.Log(
+                    $"[ShotTester] Ball reset. Position: {ball.transform.position}, IsMoving: {ball.IsMoving()}, IsLanded: {ball.IsLanded()}"
+                );
+
+            // Step 2: Reset club
+            clubDriver.ResetClub();
+
+            if (verboseLogging)
+                Debug.Log($"[ShotTester] Club reset. IsSwinging: {clubDriver.IsSwinging()}");
+
+            // Step 3: Apply configuration
+            clubDriver.clubLoftDegrees = config.loft;
+            ball.enableDrag = config.drag;
+            ball.enableLift = config.lift;
+            clubDriver.faceAngle = config.faceAngle;
+            clubDriver.swingPathAngle = config.pathAngle;
+            clubDriver.swingPlaneTilt = config.swingPlaneTilt;
+
+            // Step 4: Wait a frame to ensure everything is initialized
+            yield return null;
+
+            // Step 5: Start swing
             clubDriver.StartSwing();
 
-            // Wait until ball lands
-            while (ball.IsMoving() || !ball.IsLanded() || clubDriver.IsSwinging())
-                yield return null;
+            if (verboseLogging)
+                Debug.Log($"[ShotTester] Swing started. IsSwinging: {clubDriver.IsSwinging()}");
 
-            // Write shot data to CSV
+            // Step 6: Wait for swing to hit the ball (club swinging, ball not yet moving)
+            float timeout = Time.time + maxShotTime;
+            while (clubDriver.IsSwinging() && !ball.IsMoving())
+            {
+                if (Time.time > timeout)
+                {
+                    Debug.LogError($"[ShotTester] Timeout waiting for impact on shot {i + 1}");
+                    break;
+                }
+                yield return null;
+            }
+
+            if (verboseLogging)
+                Debug.Log($"[ShotTester] Impact detected. Ball IsMoving: {ball.IsMoving()}");
+
+            // Step 7: Wait for ball to land
+            timeout = Time.time + maxShotTime;
+            while (!ball.IsLanded())
+            {
+                if (Time.time > timeout)
+                {
+                    Debug.LogError(
+                        $"[ShotTester] Timeout waiting for ball to land on shot {i + 1}"
+                    );
+                    break;
+                }
+                yield return null;
+            }
+
+            if (verboseLogging)
+                Debug.Log($"[ShotTester] Ball landed. Final position: {ball.FinalPosition}");
+
+            // Step 8: Wait for club to finish swinging (if not already)
+            while (clubDriver.IsSwinging())
+            {
+                yield return null;
+            }
+
+            // Step 9: Write shot data to CSV
             WriteShotToCSV(config);
 
-            // Delay between shots
+            // Step 10: Delay between shots
             yield return new WaitForSeconds(delayBetweenShots);
         }
 
-        Debug.Log($"=== All {allShots.Count} Shots Complete ===");
-        Debug.Log($"CSV saved at: {csvPath}");
+        Debug.Log(
+            $"═══════════════════════════════════════\n"
+                + $"  ALL {allShots.Count} SHOTS COMPLETE\n"
+                + $"═══════════════════════════════════════\n"
+                + $"  CSV saved at:\n"
+                + $"  {csvPath}"
+        );
+
+        isRunning = false;
     }
 
     private void WriteShotToCSV(ShotConfig config)
     {
+        // Convert units for readability
+        float clubSpeedMph = ball.ClubSpeed * 2.237f;
+        float ballSpeedMph = ball.BallSpeed * 2.237f;
+        float carryYds = ball.Carry * 1.094f;
+
         string line = string.Format(
-            "{0},{1},{2},{3},{4},{5:F2},{6:F2},{7:F1},{8:F1},{9:F0},{10:F3},{11:F3},{12:F3},{13:F2},{14:F2},{15:F2},{16:F2},{17:F2},{18:F2}\n",
+            // Config columns (6)
+            "{0},{1},{2},{3},{4},{5},"
+                // Club delivery (8)
+                + "{6:F2},{7:F1},{8:F2},{9:F2},{10:F2},{11:F2},{12:F2},{13:F2},"
+                // Ball launch (7)
+                + "{14:F2},{15:F1},{16:F3},{17:F2},{18:F2},{19:F0},{20:F2},"
+                // Flight results (6)
+                + "{21:F2},{22:F1},{23:F2},{24:F2},{25:F2},{26:F2},"
+                // Final position (5)
+                + "{27:F2},{28:F2},{29:F2},{30:F2},{31:F2}\n",
+            // Config
             config.loft,
             config.drag,
             config.lift,
             config.pathAngle,
             config.faceAngle,
+            config.swingPlaneTilt,
+            // Club delivery
             ball.ClubSpeed,
+            clubSpeedMph,
+            ball.AttackAngle,
+            ball.ClubPath,
+            ball.FaceAngle,
+            ball.DynamicLoft,
+            ball.SpinLoft,
+            ball.FaceToPath,
+            // Ball launch
             ball.BallSpeed,
+            ballSpeedMph,
+            ball.SmashFactor,
             ball.LaunchAngle,
-            ball.SideAngle,
-            ball.SpinRPM,
-            ball.SpinVector.x,
-            ball.SpinVector.y,
-            ball.SpinVector.z,
+            ball.LaunchDirection,
+            ball.SpinRate,
+            ball.SpinAxisTilt,
+            // Flight results
             ball.Carry,
+            carryYds,
+            ball.Offline,
             ball.Apex,
             ball.FlightTime,
+            ball.CurveAfterApex,
+            // Final position
             ball.FinalPosition.x,
             ball.FinalPosition.y,
-            ball.FinalPosition.z
+            ball.FinalPosition.z,
+            ball.ApexPosition.x,
+            ball.ApexPosition.z
         );
 
         File.AppendAllText(csvPath, line);
     }
+
+    public bool IsRunning() => isRunning;
 
     public static string GetProjectRootPath()
     {
