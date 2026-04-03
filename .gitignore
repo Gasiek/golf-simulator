@@ -17,7 +17,7 @@ TestResults/
 *.userprefs
 *.pidb
 *.booproj
-
+.cursor/
 # OS
 .DS_Store
 Thumbs.db

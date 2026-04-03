@@ -125,8 +125,9 @@ public class ClubDriver3D : MonoBehaviour
     {
         float d = 0.01f * angleDir;
         Quaternion planeRot = Quaternion.Euler(swingPlaneTilt, swingPathAngle, 0f);
-        Vector3 p0 = planeRot * ComputeLocalPos(angleDeg) + clubRootOffset;
-        Vector3 p1 = planeRot * ComputeLocalPos(angleDeg + d) + clubRootOffset;
+        // Match Head.localPosition: offset lives in arc space, then whole vector is plane-rotated
+        Vector3 p0 = planeRot * (ComputeLocalPos(angleDeg) + clubRootOffset);
+        Vector3 p1 = planeRot * (ComputeLocalPos(angleDeg + d) + clubRootOffset);
         return (transform.TransformPoint(p1) - transform.TransformPoint(p0)).normalized;
     }
 
@@ -216,7 +217,10 @@ public class ClubDriver3D : MonoBehaviour
         currentAngle = startAngle;
 
         if (Head != null)
-            Head.localPosition = ComputeLocalPos(startAngle) + clubRootOffset;
+        {
+            Quaternion planeRot = Quaternion.Euler(swingPlaneTilt, swingPathAngle, 0f);
+            Head.localPosition = planeRot * (ComputeLocalPos(startAngle) + clubRootOffset);
+        }
     }
 
     private void DrawDebug(Vector3 prev, Vector3 next)

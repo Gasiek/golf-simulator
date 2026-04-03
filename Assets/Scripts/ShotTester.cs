@@ -13,6 +13,9 @@ public class ShotConfig
     public float faceAngle;
     public float swingPlaneTilt;
     public TeeHeightPreset teeHeight;
+
+    /// <summary>Null when <see cref="ShotTester.surfacePresets"/> is empty (scene/ball defaults unchanged).</summary>
+    public SurfacePreset surface;
 }
 
 public class ShotTester : MonoBehaviour
@@ -24,6 +27,17 @@ public class ShotTester : MonoBehaviour
     [Header("Tee Heights")]
     [Tooltip("Tee height presets to test. Assign ScriptableObject presets here.")]
     public TeeHeightPreset[] teeHeights;
+
+    [Header("Surfaces")]
+    [Tooltip(
+        "Surface presets to sweep (bounce/roll). Leave empty for a single run using the ball's Default Surface and scene as-is."
+    )]
+    public SurfacePreset[] surfacePresets;
+
+    [Tooltip(
+        "Ground collider's GroundSurface, if any. Required for per-shot surface changes when the ball raycast hits that collider; otherwise assign only on the ball or leave surfaces empty."
+    )]
+    public GroundSurface groundSurface;
 
     [Header("Option Arrays")]
     public float[] lofts = new float[] { 32f };
@@ -61,21 +75,40 @@ public class ShotTester : MonoBehaviour
             return;
         }
 
+        for (int i = 0; i < teeHeights.Length; i++)
+        {
+            if (teeHeights[i] == null)
+            {
+                Debug.LogError($"ShotTester: TeeHeightPreset at index {i} is null!");
+                return;
+            }
+        }
+
+        if (surfacePresets != null && surfacePresets.Length > 0 && groundSurface == null)
+        {
+            Debug.LogWarning(
+                "ShotTester: surfacePresets is set but groundSurface is not assigned. "
+                    + "If your ground uses a GroundSurface component, per-shot surfaces will not apply until you assign it here."
+            );
+        }
+
         csvPath = Path.Combine(GetTestResultsPath(), csvFileName);
 
-        // Write CSV header with D-Plane parameters
+        // Write CSV header with D-Plane and ground physics parameters
         File.WriteAllText(
             csvPath,
             // Config columns
-            "TeeHeight,TeeY,ConfigLoft,ConfigDrag,ConfigLift,ConfigPathAngle,ConfigFaceAngle,ConfigSwingPlaneTilt,"
+            "TeeHeight,TeeY,Surface,ConfigLoft,ConfigDrag,ConfigLift,ConfigPathAngle,ConfigFaceAngle,ConfigSwingPlaneTilt,"
                 // Club delivery (D-Plane inputs)
                 + "ClubSpeed_mps,ClubSpeed_mph,AttackAngle,ClubPath,FaceAngle,DynamicLoft,SpinLoft,FaceToPath,"
                 // Ball launch (D-Plane outputs)
                 + "BallSpeed_mps,BallSpeed_mph,SmashFactor,LaunchAngle,LaunchDirection,SpinRate_rpm,SpinAxisTilt,"
                 // Flight results
-                + "Carry_m,Carry_yds,Offline_m,Apex_m,FlightTime_s,CurveAfterApex_m,"
+                + "Carry_m,Carry_yds,Apex_m,FlightTime_s,CurveAfterApex_m,"
+                // Ground physics
+                + "Roll_m,Roll_yds,Total_m,Total_yds,Bounces,FirstBounceApex_m,"
                 // Final position
-                + "FinalPosX,FinalPosY,FinalPosZ,ApexPosX,ApexPosZ\n"
+                + "Offline_m,FinalPosX,FinalPosY,FinalPosZ\n"
         );
 
         GenerateAllShots();
@@ -85,6 +118,7 @@ public class ShotTester : MonoBehaviour
     private void GenerateAllShots()
     {
         allShots.Clear();
+        foreach (var surface in EnumerateSurfacesForTest())
         foreach (var tee in teeHeights)
         foreach (var loft in lofts)
         foreach (var path in pathAngles)
@@ -103,6 +137,7 @@ public class ShotTester : MonoBehaviour
                     drag = drag,
                     lift = lift,
                     teeHeight = tee,
+                    surface = surface,
                 }
             );
         }
@@ -110,11 +145,40 @@ public class ShotTester : MonoBehaviour
         Debug.Log($"[ShotTester] Generated {allShots.Count} shot scenarios.");
     }
 
+    /// <summary>
+    /// One null when <see cref="surfacePresets"/> is empty (no surface mutation). Otherwise each array slot, including nulls (no-op apply).
+    /// </summary>
+    private IEnumerable<SurfacePreset> EnumerateSurfacesForTest()
+    {
+        if (surfacePresets == null || surfacePresets.Length == 0)
+        {
+            yield return null;
+            yield break;
+        }
+
+        foreach (var preset in surfacePresets)
+            yield return preset;
+    }
+
+    private void ApplySurfaceForShot(SurfacePreset preset)
+    {
+        if (preset == null)
+            return;
+
+        ball.defaultSurface = preset;
+        if (groundSurface != null)
+            groundSurface.surfacePreset = preset;
+    }
+
     private IEnumerator RunShotsSequentially()
     {
         isRunning = true;
 
-        Debug.Log($"[ShotTester] Starting test sequence with {teeHeights.Length} tee heights.");
+        int surfaceSlots =
+            surfacePresets == null || surfacePresets.Length == 0 ? 1 : surfacePresets.Length;
+        Debug.Log(
+            $"[ShotTester] Starting test sequence with {teeHeights.Length} tee height(s), {surfaceSlots} surface slot(s)."
+        );
 
         for (int i = 0; i < allShots.Count; i++)
         {
@@ -125,6 +189,7 @@ public class ShotTester : MonoBehaviour
                     + $"  SHOT {i + 1}/{allShots.Count}\n"
                     + $"═══════════════════════════════════════\n"
                     + $"  Tee: {config.teeHeight.displayName} (Y: {config.teeHeight.ballY})\n"
+                    + $"  Surface: {(config.surface != null ? config.surface.displayName : "(unchanged)")}\n"
                     + $"  Loft: {config.loft}°\n"
                     + $"  Path Angle: {config.pathAngle}°\n"
                     + $"  Face Angle: {config.faceAngle}°\n"
@@ -132,7 +197,8 @@ public class ShotTester : MonoBehaviour
                     + $"  Drag: {config.drag}, Lift: {config.lift}"
             );
 
-            // Step 1: Reset ball to starting position with tee height
+            // Step 1: Surface + reset (defaultSurface must be set before ResetAndPrepare)
+            ApplySurfaceForShot(config.surface);
             Vector3 ballStartPos = new Vector3(0f, config.teeHeight.ballY, 0f);
             ball.ResetAndPrepare(ballStartPos);
 
@@ -179,24 +245,38 @@ public class ShotTester : MonoBehaviour
             }
 
             if (verboseLogging)
-                Debug.Log($"[ShotTester] Impact detected. Ball IsMoving: {ball.IsMoving()}");
+                Debug.Log($"[ShotTester] After swing phase. Ball IsMoving: {ball.IsMoving()}");
 
-            // Step 7: Wait for ball to land
-            timeout = Time.time + maxShotTime;
-            while (!ball.IsLanded())
+            // Step 7: Wait for ball to stop. Idle is not Stopped — if we never launched (miss or
+            // HandleImpact early exit), waiting here would hit maxShotTime every time.
+            if (ball.IsMoving())
             {
-                if (Time.time > timeout)
+                timeout = Time.time + maxShotTime;
+                while (!ball.IsStopped())
                 {
-                    Debug.LogError(
-                        $"[ShotTester] Timeout waiting for ball to land on shot {i + 1}"
-                    );
-                    break;
+                    if (Time.time > timeout)
+                    {
+                        Debug.LogError(
+                            $"[ShotTester] Timeout waiting for ball to stop on shot {i + 1}"
+                        );
+                        break;
+                    }
+                    yield return null;
                 }
-                yield return null;
-            }
 
-            if (verboseLogging)
-                Debug.Log($"[ShotTester] Ball landed. Final position: {ball.FinalPosition}");
+                if (verboseLogging)
+                    Debug.Log(
+                        $"[ShotTester] Ball stopped. Carry: {ball.Carry:F1}m, Roll: {ball.RollDistance:F1}m, Total: {ball.TotalDistance:F1}m, Bounces: {ball.BounceCount}"
+                    );
+            }
+            else
+            {
+                Debug.LogWarning(
+                    $"[ShotTester] Shot {i + 1}/{allShots.Count}: ball never launched "
+                        + "(club missed, club speed < threshold, or impact normal rejected). "
+                        + "CSV row will show zeros."
+                );
+            }
 
             // Step 8: Wait for club to finish swinging (if not already)
             while (clubDriver.IsSwinging())
@@ -228,21 +308,28 @@ public class ShotTester : MonoBehaviour
         float clubSpeedMph = ball.ClubSpeed * 2.237f;
         float ballSpeedMph = ball.BallSpeed * 2.237f;
         float carryYds = ball.Carry * 1.094f;
+        float rollYds = ball.RollDistance * 1.094f;
+        float totalYds = ball.TotalDistance * 1.094f;
+
+        string surfaceLabel = config.surface != null ? config.surface.displayName : "";
 
         string line = string.Format(
-            // Config columns (8)
-            "{0},{1:F4},{2},{3},{4},{5},{6},{7},"
+            // Config columns (9)
+            "{0},{1:F4},{2},{3},{4},{5},{6},{7},{8},"
                 // Club delivery (8)
-                + "{8:F2},{9:F1},{10:F2},{11:F2},{12:F2},{13:F2},{14:F2},{15:F2},"
+                + "{9:F2},{10:F1},{11:F2},{12:F2},{13:F2},{14:F2},{15:F2},{16:F2},"
                 // Ball launch (7)
-                + "{16:F2},{17:F1},{18:F3},{19:F2},{20:F2},{21:F0},{22:F2},"
-                // Flight results (6)
-                + "{23:F2},{24:F1},{25:F2},{26:F2},{27:F2},{28:F2},"
-                // Final position (5)
-                + "{29:F2},{30:F2},{31:F2},{32:F2},{33:F2}\n",
+                + "{17:F2},{18:F1},{19:F3},{20:F2},{21:F2},{22:F0},{23:F2},"
+                // Flight results (5)
+                + "{24:F2},{25:F1},{26:F2},{27:F2},{28:F2},"
+                // Ground physics (6)
+                + "{29:F2},{30:F1},{31:F2},{32:F1},{33},{34:F2},"
+                // Final position (4)
+                + "{35:F2},{36:F2},{37:F2},{38:F2}\n",
             // Config
             config.teeHeight.displayName,
             config.teeHeight.ballY,
+            surfaceLabel,
             config.loft,
             config.drag,
             config.lift,
@@ -269,16 +356,21 @@ public class ShotTester : MonoBehaviour
             // Flight results
             ball.Carry,
             carryYds,
-            ball.Offline,
             ball.Apex,
             ball.FlightTime,
             ball.CurveAfterApex,
+            // Ground physics
+            ball.RollDistance,
+            rollYds,
+            ball.TotalDistance,
+            totalYds,
+            ball.BounceCount,
+            ball.FirstBounceApex,
             // Final position
+            ball.Offline,
             ball.FinalPosition.x,
             ball.FinalPosition.y,
-            ball.FinalPosition.z,
-            ball.ApexPosition.x,
-            ball.ApexPosition.z
+            ball.FinalPosition.z
         );
 
         File.AppendAllText(csvPath, line);

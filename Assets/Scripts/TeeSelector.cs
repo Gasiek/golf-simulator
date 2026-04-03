@@ -79,7 +79,7 @@ public class TeeSelector : MonoBehaviour
     /// </summary>
     public void SelectTee(TeeHeightPreset preset)
     {
-        if (availableTees == null)
+        if (availableTees == null || preset == null)
             return;
 
         for (int i = 0; i < availableTees.Length; i++)

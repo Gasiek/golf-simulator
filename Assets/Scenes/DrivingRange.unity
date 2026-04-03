@@ -789,6 +789,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BallImpactSolver3D
   clubDriver: {fileID: 931929944}
+  defaultSurface: {fileID: 11400000, guid: d2a8dea59f44040dea95e74eb0fb1c7c, type: 2}
+  groundLayer:
+    serializedVersion: 2
+    m_Bits: 8
+  minBounceVelocity: 0.5
+  maxBounces: 10
   ballMass: 0.04593
   ballRadius: 0.02135
   clubMass: 0.2
@@ -850,19 +856,21 @@ MonoBehaviour:
   clubDriver: {fileID: 931929944}
   ball: {fileID: 491791848}
   teeHeights:
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 11400000, guid: a5a7dc4b42e4d47a389f20b6610b0e9a, type: 2}
+  - {fileID: 11400000, guid: d83fb3ab7460447c785c8da16700637e, type: 2}
+  surfacePresets:
+  - {fileID: 11400000, guid: d2a8dea59f44040dea95e74eb0fb1c7c, type: 2}
+  - {fileID: 11400000, guid: 24183b04917f04f6fbad35119c07f292, type: 2}
+  - {fileID: 11400000, guid: c8dc7c62b67354a21af2091f0333c6d1, type: 2}
+  - {fileID: 11400000, guid: fd07e1b1b9b474da081cc81757911c19, type: 2}
+  groundSurface: {fileID: 1843431114}
   lofts:
   - 32
   - 12
   pathAngles:
   - -4
-  - 0
-  - 4
   faceAngles:
   - -2
-  - 0
-  - 2
   swingPlaneTilts:
   - -5
   dragOptions: 01
@@ -992,7 +1000,7 @@ MonoBehaviour:
   clubLoftDegrees: 32
   faceAngle: 0
   swingPathAngle: 0
-  swingPlaneTilt: -10
+  swingPlaneTilt: 0
   impactPlaneY: 0
   clubZOffset: 0
   drawDebug: 1
@@ -1266,36 +1274,15 @@ GameObject:
   - component: {fileID: 1843431113}
   - component: {fileID: 1843431112}
   - component: {fileID: 1843431111}
-  - component: {fileID: 1843431110}
-  m_Layer: 0
+  - component: {fileID: 1843431115}
+  - component: {fileID: 1843431114}
+  m_Layer: 3
   m_Name: Ground
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!64 &1843431110
-MeshCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1843431109}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 0
-  serializedVersion: 5
-  m_Convex: 0
-  m_CookingOptions: 30
-  m_Mesh: {fileID: 10209, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!23 &1843431111
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -1368,6 +1355,44 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1843431114
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1843431109}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4eafa5d39b4cf4245abea7fa95559a55, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GroundSurface
+  surfacePreset: {fileID: 11400000, guid: fd07e1b1b9b474da081cc81757911c19, type: 2}
+  normalRaycastLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+--- !u!64 &1843431115
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1843431109}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 10209, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!1 &1981247942
 GameObject:
   m_ObjectHideFlags: 0
